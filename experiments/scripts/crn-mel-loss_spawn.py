@@ -1,5 +1,6 @@
 import time
 import zipfile
+
 import torch
 from torch import nn
 import torchaudio
@@ -163,6 +164,7 @@ def train(
     model.train()
     start_time = time.perf_counter()
 
+    step_counter = 0
     for epoch in range(epochs):
         for batch, (noisy_batch, clean_batch, _) in enumerate(dataloader):
             noisy_spec = preprocessor(noisy_batch).to(device)
@@ -173,7 +175,7 @@ def train(
             est_clean_spec, _ = model(noisy_spec)
             loss = loss_fn(est_clean_spec, clean_spec)
             
-            writer.add_scalar("Loss/Step", loss, epoch*size + batch)
+            writer.add_scalar("Loss/Step", loss, step_counter)
 
             if scheduler:
                 scheduler.step(loss)
@@ -182,6 +184,7 @@ def train(
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
+            step_counter += 1
 
             if (batch + 1) % 20 == 0:
                 torch.save(model, save_path + f"crn-model-checkpoint.pt")
@@ -351,6 +354,10 @@ def main():
     dataset = NoisySpeech(clean_zip, noisy_zip, extracted_path, device=DEVICE)
     _, _, input_samplerate = dataset.__getitem__(0)
 
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [1, 0])
+    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=CollateNoisySpeech)
+    # test_dataloader = torch.utils.data.DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=CollateNoisySpeech)
+
     enhancer = CRN(n_fft=N_FFT, gru_layers=GRU_LAYERS)
     enhancer.to(DEVICE)
 
@@ -358,13 +365,6 @@ def main():
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.1, patience=100, threshold=5e-2, min_lr=5e-5)
     loss = MelLoss(sample_rate=RESAMPLE_SAMPLERATE, n_stft=N_FFT // 2 + 1, n_mels=N_MELS)
     preprocessor = PreProcessor(input_samplerate=input_samplerate, resample_samplerate=RESAMPLE_SAMPLERATE, n_fft=N_FFT, power=None)
-
-    train_size = int(0.9 * len(dataset)) 
-    eval_size = int(0.1 * len(dataset))
-    leftover = len(dataset) - train_size - eval_size
-
-    train_dataset, eval_dataset, _ = torch.utils.data.random_split(dataset, [train_size, eval_size, leftover])
-    train_dataloader = torch.utils.data.DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=CollateNoisySpeech)
 
     print("Start Training...")
     train(
@@ -385,7 +385,7 @@ def main():
     writer.flush()
     writer.close()
     print("Save Model...")
-    torch.save(enhancer.state_dict(), "crn-nfft_512-nmel_50-melloss-bs_16.pt")
+    torch.save(enhancer.state_dict(), "crn-nfft_512-nmel_50-melloss-bs_16-full.pt")
 
 if __name__=="__main__":
     main() 
