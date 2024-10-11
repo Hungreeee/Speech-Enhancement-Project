@@ -1,6 +1,6 @@
 # Speech-Enhancement-Project
 
-Team members: 
+**Team members:** Diana Bacircea, Jussi H, Ville Huhtala, Sopiko Kurdadze, Hung Nguyen
 
 A modified version of [Zhang W. et. al, Magnitude-and-phase-aware Speech Enhancement with Parallel Sequence Modeling](https://arxiv.org/abs/2310.07316).
 
